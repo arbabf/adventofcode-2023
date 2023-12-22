@@ -3,73 +3,37 @@
 #include <ctype.h>
 #include <string.h>
 
-#define LINE_LENGTH 64
+#define LINE_LENGTH 256
 #define ARR_LENGTH 256
 
 int main() {
     FILE *fp;
-    fp = fopen("input.txt", "w");
-    
-    fprintf(fp, "seeds: 79 14 55 13\n"
-    "\n"
-    "seed-to-soil map:\n"
-    "50 98 2\n"
-    "52 50 48\n"
-    "\n"
-    "soil-to-fertilizer map:\n"
-    "0 15 37\n"
-    "37 52 2\n"
-    "39 0 15\n"
-    "\n"
-    "fertilizer-to-water map:\n"
-    "49 53 8\n"
-    "0 11 42\n"
-    "42 0 7\n"
-    "57 7 4\n"
-    "\n"
-    "water-to-light map:\n"
-    "88 18 7\n"
-    "18 25 70\n"
-    "\n"
-    "light-to-temperature map:\n"
-    "45 77 23\n"
-    "81 45 19\n"
-    "68 64 13\n"
-    "\n"
-    "temperature-to-humidity map:\n"
-    "0 69 1\n"
-    "1 0 69\n"
-    "\n"
-    "humidity-to-location map:\n"
-    "60 56 37\n"
-    "56 93 4\n");
-    
-    fclose(fp);
     
     char buf[LINE_LENGTH];
     char *next_token;
-    int *seeds = (int *)malloc(sizeof(int));
+    long long *seeds = (long long *)malloc(sizeof(long long));
     int seeds_length = 1;
     int seeds_counter = 0;
-    // init 2d array of seed mappings
-    // table 0 is seeds
-    // table 1 is soil
-    // table 2 is fertiliser
-    // table 3 is water
-    // table 4 is light
-    // table 5 is temperature
-    // table 6 is humidity
-    // table 7 is location
-    int seed_table[8][ARR_LENGTH];
-    for (int i = 0; i < ARR_LENGTH; i++) {
-        seed_table[0][i] = i;
+    // 3d array of seed mappings
+    // table 0 is soil
+    // table 1 is fertiliser
+    // table 2 is water
+    // table 3 is light
+    // table 4 is temperature
+    // table 5 is humidity
+    // table 6 is location
+    // for each table, there is a 2d array of variable rows + 3 columns
+    // column 1 = dest, column 2 = src, column 3 = len
+    long long **mapping_table[7];
+    int mapping_length[7];
+    for (int i = 0; i < 7; i++) {
+        mapping_table[i] = (long long **)malloc(3 * sizeof(long long *));
+        mapping_length[i] = 1;
     }
-    // copy default values to all tables
-    for (int i = 1; i < 8; i++) {
-        memcpy(seed_table[i], seed_table[0], ARR_LENGTH * sizeof(int));
-    }
-    int table_counter = 0;
-    int min_location = -1;
+    int mapping_counter[7] = {0};
+
+    int table_counter = -1; // starts at 0 when we start parsing the mapping table
+    long long min_location = LONG_LONG_MAX;
     
     fp = fopen("input.txt", "r");
     
@@ -79,46 +43,70 @@ int main() {
     while ((next_token = strtok(NULL, " ")) != NULL) {
         if (seeds_counter == seeds_length) {
             seeds_length *= 2;
-            seeds = (int *)realloc(seeds, seeds_length * sizeof(int));
+            seeds = (long long *)realloc(seeds, seeds_length * sizeof(long long));
         }
         seeds[seeds_counter] = atoi(next_token);
         seeds_counter += 1;
     }
 
+    // populate mapping table
     while (fgets(buf, LINE_LENGTH, fp) != NULL) {
         if (isalpha(buf[0])) {
+            // new seed mapping entry
             table_counter += 1;
-            // if (table_counter == 3) {
-            //     for (int i = 0; i < ARR_LENGTH; i++) {
-            //         printf("%d: %d\n", i, seed_table[1][i]);
-            //     }
-            //     break;
-            // }
         }
         else if (isdigit(buf[0])) {
             buf[strlen(buf)-1] = '\0';
+
             // get the mapping values
-            //next_token = strtok(buf, " ");
-            int dest = atoi(strtok(buf, " "));
-            int src = atoi(strtok(NULL, " "));
-            int len = atoi(strtok(NULL, " "));
-            //printf("%d\n", table_counter);
-            printf("%d, %d, %d\n", dest, src, len);
-            for (int i = 0; i < len; i++) {
-                seed_table[table_counter][src + i] = seed_table[table_counter - 1][dest + i];
-                if (table_counter == 2) {
-                    //printf("%d %d\n", seed_table[table_counter][src + i], seed_table[table_counter - 1][dest + i]);
-                    printf("%d %d\n", src + i, dest + i);
-                    break;
-                }
-                
+            long long dest = atoll(strtok(buf, " "));
+            long long src = atoll(strtok(NULL, " "));
+            long long len = atoll(strtok(NULL, " "));
+
+            if (mapping_counter[table_counter] == mapping_length[table_counter]) {
+                mapping_length[table_counter] *= 2;
+                mapping_table[table_counter] = (long long **)realloc(mapping_table[table_counter], 
+                                    mapping_length[table_counter] * 3 * sizeof(long long *));
             }
-            
+
+            long long *mapping_values;
+            mapping_values = (long long *)malloc(3 * sizeof(long long));
+            mapping_values[0] = dest;
+            mapping_values[1] = src;
+            mapping_values[2] = len;
+            mapping_table[table_counter][mapping_counter[table_counter]] = mapping_values;
+            mapping_counter[table_counter]++;
         }
     }
     
     fclose(fp);
-    printf("%d\n", seed_table[3][79]);
-    printf("%d\n", min_location);
+
+    // find minimum location by traversing the mapping table
+    for (int i = 0; i < seeds_counter; i++) {
+        long long next_val = seeds[i];
+        for (int j = 0; j < 7; j++) {
+            for (int k = 0; k < mapping_counter[j]; k++) {
+                if (next_val >= mapping_table[j][k][1] && 
+                    next_val <= mapping_table[j][k][1] + mapping_table[j][k][2] - 1) {
+                        next_val = mapping_table[j][k][0] + next_val - mapping_table[j][k][1];
+                        break;
+                    }
+            }
+        }
+        if (next_val < min_location) {
+            min_location = next_val;
+        }
+    }
+    
+    free(seeds);
+    for (int i = 0; i < 7; i++) {
+        for (int j = 0; j < mapping_counter[i]; j++) {
+            free(mapping_table[i][j]);
+        }
+        free(mapping_table[i]);
+    }
+
+    printf("%lld\n", min_location);
+
     return EXIT_SUCCESS;
 }
